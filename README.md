@@ -19,17 +19,6 @@ The focus is on building strong TCL fundamentals and applying them in real-world
 * Carry out hierarchical design checks to identify missing or mismatched modules
 * Extract and analyze QOR (Quality of Results) data such as WNS (Worst Negative Slack) and FEP (False Path Endpoints)
 
----
-
-## Module Overview
-
-| Module   | Focus Area                                                       |
-| -------- | ---------------------------------------------------------------- |
-| Module 1 | TCL basics and using the VSDSYNTH toolbox                        |
-| Module 2 | Variables, data handling, and reading constraints from CSV files |
-| Module 3 | Parsing and applying clock and I/O constraints                   |
-| Module 4 | End-to-end scripting and introduction to Yosys synthesis         |
-| Module 5 | Advanced TCL automation and QOR reporting                        |
 
 ---
 
