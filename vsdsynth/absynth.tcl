@@ -188,8 +188,6 @@ set input_late_rise_slew_start [lindex [lindex [constraints search rect $clock_s
 set input_late_fall_slew_start [lindex [lindex [constraints search rect $clock_start_column $input_ports_start [expr {$number_of_columns-1}] [expr {$output_ports_start-1}]  late_fall_slew] 0 ] 0]
 
 set related_clock [lindex [lindex [constraints search rect $clock_start_column $input_ports_start [expr {$number_of_columns-1}] [expr {$output_ports_start-1}]  clocks] 0 ] 0]
-#set bussed_status [lindex [lindex [constraints search rect $clock_start_column $input_ports_start [expr {$number_of_columns-1}] [expr {$output_ports_start-1}]  bussed] 0 ] 0]
-#puts "\n a = $bussed_status"
 
 set i [expr {$input_ports_start+1}]
 set end_of_ports [expr {$output_ports_start-1}]
@@ -198,15 +196,9 @@ puts "\nInfo-SDC: Categorizing input ports as bits and bussed"
 
 while { $i < $end_of_ports } {
 #---------------differentiating input ports as bussed and bits-------------------#
-#glob command is used to match all the files with the same pattern as specified. In our case its matching all the .v files in $NetlistDirectory.
-#$netlist will have the path as well as the files stored in it separated by a space 
 set netlist [glob -dir $NetlistDirectory *.v] 
 set tmp_file [open /tmp/1 w]
 
-#$f will have each file that is present in $netlist. u open the file using fd. u read each line of the file using gets command.
-# u set a pattern1 as the name of the input. then compare in each line to check whether it exists using regexp. 
-#if it does ull split and take the 0 index term with delimiter as ";". now check if all lines have first term as input by removing spaces b/w in them. 
-#if they do make a string s1 by removing the the spaces. finally enter these into $tmp_file while subbing multiple sapces by a single space. now close $fd
 foreach f $netlist {
         set fd [open $f]
 		#puts "reading file $f"
@@ -215,13 +207,9 @@ foreach f $netlist {
             if {[regexp -all -- $pattern1 $line]} {
 				#puts "\npattern1 \"$pattern1\" found and matching line in verilog file \"$f\" is \"$line\""
 				set pattern2 [lindex [split $line ";"] 0]
-				#puts "\ncreating pattern2 by splitting pattern1 using semi-colon as delimiter => \"$pattern2\""
 				if {[regexp -all {input} [lindex [split $pattern2 "\S+"] 0]]} {	
-					#puts "\nout of all patterns, \"$pattern2\" has matching string \"input\". So preserving this line and ignoring others"
 					set s1 "[lindex [split $pattern2 "\S+"] 0] [lindex [split $pattern2 "\S+"] 1] [lindex [split $pattern2 "\S+"] 2]"
-					#puts "\nprinting first 3 elements of pattern as \"$s1\" using space as delimiter"
 					puts -nonewline $tmp_file "\n[regsub -all {\s+} $s1 " "]"
-					#puts "\nreplace multiple spaces in s1 by space and reformat as \"[regsub -all {\s+} $s1 " "]\""
 				} 
 #				else { puts " \"$pattern2\" didnt have first term as 'input'" }
        		}
@@ -232,11 +220,10 @@ close $tmp_file
 
 set tmp_file [open /tmp/1 r]
 set tmp2_file [open /tmp/2 w]
-#read the $tmp_file ; split with \n as delimiter ; lsort - unique --> takes only unique 1 value; join with \n as delimiter; o/p is just 1 input line
 puts -nonewline $tmp2_file "[join [lsort -unique [split [read $tmp_file] \n]] \n]"
-#each time u open a file in write mode the data in side is overwritten
 close $tmp_file
 close $tmp2_file
+
 set tmp2_file [open /tmp/2 r]
 #count is set to check bussed and non bussed ports
 set count [llength [read $tmp2_file]] 
@@ -275,10 +262,11 @@ set output_late_rise_delay_start [lindex [lindex [constraints search rect $clock
 set output_late_fall_delay_start [lindex [lindex [constraints search rect $clock_start_column $output_ports_start [expr {$number_of_columns-1}] [expr {$number_of_rows-1}]  late_fall_delay] 0 ] 0]
 set output_load_start [lindex [lindex [constraints search rect $clock_start_column $output_ports_start [expr {$number_of_columns-1}] [expr {$number_of_rows-1}]  load] 0 ] 0]
 set related_clock [lindex [lindex [constraints search rect $clock_start_column $output_ports_start [expr {$number_of_columns-1}] [expr {$number_of_rows-1}]  clocks] 0 ] 0]
-#et bussed_status [lindex [lindex [constraints search rect $clock_start_column $output_ports_start [expr {$number_of_columns-1}] [expr {$number_of_rows-1}]  bussed] 0 ] 0]
+
 
 set i [expr {$output_ports_start+1}]
 set end_of_op_ports [expr {$number_of_rows}]
+
 puts "\nInfo-SDC: Working on IO constraints....."
 puts "\nInfo-SDC: Categorizing output ports as bits and bussed"
 
@@ -308,11 +296,15 @@ foreach f $netlist {
 close $fd
 }
 close $tmp_file
+
+
 set tmp_file [open /tmp/1 r]
 set tmp2_file [open /tmp/2 w]
 puts -nonewline $tmp2_file "[join [lsort -unique [split [read $tmp_file] \n]] \n]"
 close $tmp_file
 close $tmp2_file
+
+
 set tmp2_file [open /tmp/2 r]
 set count [llength [read $tmp2_file]] 
 #puts "\nsplitting content of tmp_ using space and counting number of elements as $count"
@@ -487,9 +479,9 @@ if {$enable_prelayout_timing == 1} {
 	set spef_file [open $OutputDirectory/$DesignName.spef w]
 	puts $spef_file "*SPEF \"IEEE 1481-1998\""
 	puts $spef_file "*DESIGN \"$DesignName\""
-	puts $spef_file "*DATE \"Sun Jun 11 11:59:00 2023\""
-	puts $spef_file "*VENDOR \"VLSI System Design\""
-	puts $spef_file "*PROGRAM \"TCL Workshop\""
+	puts $spef_file "*DATE \"Sun May 11 20:51:00 2025\""
+	puts $spef_file "*VENDOR \"PS 2025 Hackathon\""
+	puts $spef_file "*PROGRAM \"Benchmark Parasitic Generator\""
 	puts $spef_file "*DATE \"0.0\""
 	puts $spef_file "*DESIGN FLOW \"NETLIST_TYPE_VERILOG\""
 	puts $spef_file "*DIVIDER /"
@@ -514,120 +506,123 @@ close $conf_file
 
 #------------------------find STA runtime--------------------------------#
 set tcl_precision 3
+
 set time_elapsed_in_us [time {exec /home/vsduser/OpenTimer-1.0.5/bin/OpenTimer < $OutputDirectory/$DesignName.conf >& $OutputDirectory/$DesignName.results} 1]
-#puts "time_elapsed_in_us is $time_elapsed_in_us"
-set time_elapsed_in_sec "[expr {[lindex $time_elapsed_in_us 0]/100000}]sec"
-#puts "time_elapsed_in_sec is $time_elapsed_in_sec"
+set time_elapsed_in_sec "[expr {[lindex $time_elapsed_in_us 0]/100000}] sec"
 puts "\nInfo: STA finished in $time_elapsed_in_sec seconds"
+puts "\nInfo: Refer to $OutputDirectory/$DesignName.results for warning and errors"
 
+puts "tcl_precision is $tcl_precision
 
-#-------------------------find worst output violation--------------------------------#
+#---------------find WNS using RAT-------------------------#
 set worst_RAT_slack "-"
 set report_file [open $OutputDirectory/$DesignName.results r]
 set pattern {RAT}
+puts "pattern is $pattern"
 while {[gets $report_file line] != -1} {
 	if {[regexp $pattern $line]} {
 		set worst_RAT_slack "[expr {[lindex $line 3]/1000}]ns"
+		puts "worst_RAT_slack is $worst_RAT_slack"
 		break
 	} else {
 		continue
 	}
 }
 close $report_file
+#return
 
-#-------------------------find number of output violations--------------------------------#	
+#--------------------------fine number of output violation------------#
 set report_file [open $OutputDirectory/$DesignName.results r]
 set count 0
 while {[gets $report_file line] != -1} {
-	incr count [regexp -all -- $pattern $line]
+                incr count [regexp -all -- $pattern $line]
 }
-set Number_output_violations $count
+set Number_of_output_violations $count
+puts "Number of output violations $Number_of_output_violations"
 close $report_file
 
-#-------------------------find worst setup violation--------------------------------#
+
+#---------------find WNS setup violation-------------------------#
 set worst_negative_setup_slack "-"
-set report_file [open $OutputDirectory/$DesignName.results r] 
+set report_file [open $OutputDirectory/$DesignName.results r]
 set pattern {Setup}
+puts "pattern is $pattern"
 while {[gets $report_file line] != -1} {
-	if {[regexp $pattern $line]} {
-		set worst_negative_setup_slack "[expr {[lindex $line 3]/1000}]ns"
-		break
-	} else {
-		continue
-	}
+        if {[regexp $pattern $line]} {
+                set worst_negative_setup_slack "[expr {[lindex $line 3]/1000}]ns"
+                break
+        } else {
+                continue
+        }
 }
 close $report_file
 
-#-------------------------find number of setup violations--------------------------------#
+#---------------find number of setup violation-------------------------#
+
 set report_file [open $OutputDirectory/$DesignName.results r]
 set count 0
 while {[gets $report_file line] != -1} {
-	incr count [regexp -all -- $pattern $line]
+                incr count [regexp -all -- $pattern $line]
 }
 set Number_of_setup_violations $count
 close $report_file
 
-#-------------------------find worst hold violation--------------------------------#
+#---------------find WNS hold violation-------------------------#
 set worst_negative_hold_slack "-"
-set report_file [open $OutputDirectory/$DesignName.results r] 
+set report_file [open $OutputDirectory/$DesignName.results r]
 set pattern {Hold}
+puts "pattern is $pattern"
 while {[gets $report_file line] != -1} {
-	if {[regexp $pattern $line]} {
-		set worst_negative_hold_slack "[expr {[lindex $line 3]/1000}]ns"
-		break
-	} else {
-		continue
-	}
+        if {[regexp $pattern $line]} {
+                set worst_negative_hold_slack "[expr {[lindex $line 3]/1000}]ns"
+                break
+        } else {
+                continue
+        }
 }
 close $report_file
 
-#-------------------------find number of hold violations--------------------------------#
+#---------------find number of hold violation-------------------------#
+
 set report_file [open $OutputDirectory/$DesignName.results r]
 set count 0
 while {[gets $report_file line] != -1} {
-	incr count [regexp -all -- $pattern $line]
+                incr count [regexp -all -- $pattern $line]
 }
 set Number_of_hold_violations $count
 close $report_file
 
-#-------------------------find number of instances--------------------------------#
 
+#---------------find number of instance---------------------------#
 set pattern {Num of gates}
-set report_file [open $OutputDirectory/$DesignName.results r] 
+puts "pattern is $pattern"
+set report_file [open $OutputDirectory/$DesignName.results r]
 while {[gets $report_file line] != -1} {
-	if {[regexp $pattern $line]} {
-		set Instance_count "[lindex [join $line " "] 4 ]"
-		break
-	} else {
-		continue
-	}
+        if {[regexp $pattern $line]} {
+                set Instance_count [lindex [join $line " "] 4 ]
+                break
+        } else {
+                continue
+        }
 }
 close $report_file
 
-#puts "DesignName is \{$DesignName\}"
-#puts "time_elapsed_in_sec is \{$time_elapsed_in_sec\}"
-#puts "Instance_count is \{$Instance_count\}"
-#puts "worst_negative_setup_slack is \{$worst_negative_setup_slack\}"
-#puts "Number_of_setup_violations is \{$Number_of_setup_violations\}"
-#puts "worst_negative_hold_slack is \{$worst_negative_hold_slack\}"
-#puts "Number_of_hold_violations is \{$Number_of_hold_violations\}"
-#puts "worst_RAT_slack is \{$worst_RAT_slack\}"
-#puts "Number_output_violations is \{$Number_output_violations\}"
+set Instance_count "$Instance_count PS"
+set time_elapsed_in_sec "$time_elapsed_in_sec PS"
 
 puts "\n"
 puts "						****PRELAYOUT TIMING RESULTS**** 					"
-set formatStr "%15s %15s %15s %15s %15s %15s %15s %15s %15s"
+set formatStr {%15s%15s%15s%15s%15s%15s%15s%15s%15s}
 
-puts [format $formatStr "----------" "-------" "--------------" "---------" "---------" "--------" "--------" "-------" "-------"]
-puts [format $formatStr "DesignName" "Runtime" "Instance Count" "WNS Setup" "FEP Setup" "WNS Hold" "FEP Hold" "WNS RAT" "FEP RAT"]
-puts [format $formatStr "----------" "-------" "--------------" "---------" "---------" "--------" "--------" "-------" "-------"]
-foreach design_name $DesignName runtime $time_elapsed_in_sec instance_count $Instance_count wns_setup $worst_negative_setup_slack fep_setup $Number_of_setup_violations wns_hold $worst_negative_hold_slack fep_hold $Number_of_hold_violations wns_rat $worst_RAT_slack fep_rat $Number_output_violations {
+puts [format $formatStr "-----------" "-------" "--------------" "-----------" "-----------" "----------" "----------" "-------" "-------"]
+puts [format $formatStr "Design Name" "Runtime" "Instance Count" " WNS Setup " " FEP Setup " " WNS Hold " " FEP Hold " "WNS RAT" "FEP RAT"]
+puts [format $formatStr "-----------" "-------" "--------------" "-----------" "-----------" "----------" "----------" "-------" "-------"]
+foreach design_name $DesignName runtime $time_elapsed_in_sec instance_count $Instance_count wns_setup $worst_negative_setup_slack fep_setup $Number_of_setup_violations wns_hold $worst_negative_hold_slack fep_hold $Number_of_hold_violations wns_rat $worst_RAT_slack fep_rat $Number_of_output_violations {
 	puts [format $formatStr $design_name $runtime $instance_count $wns_setup $fep_setup $wns_hold $fep_hold $wns_rat $fep_rat]
 }
 
-puts [format $formatStr "----------" "-------" "--------------" "---------" "---------" "--------" "--------" "-------" "-------"]
-puts "\n"
-	
+puts [format $formatStr "-----------" "-------" "--------------" "-----------" "-----------" "----------" "----------" "-------" "-------"]
+puts "\n"	
 
 
 

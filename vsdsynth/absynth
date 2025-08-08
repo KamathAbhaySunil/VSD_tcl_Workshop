@@ -50,5 +50,5 @@ if (! -f $argv[1] || $argv == "-help") then
 		exit 1
 	endif
 else
-	tclsh vsdsynth.tcl $argv[1]
+	tclsh absynth.tcl $argv[1]
 endif
