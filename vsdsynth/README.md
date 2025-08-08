@@ -1,335 +1,208 @@
-```markdown
-***
 
-# TCL Script for Constraint Processing, Synthesis, and STA Flow
+# ASIC Synthesis & STA Automation (Yosys + OpenTimer)
 
-This TCL script automates the design flow for ASIC synthesis and static timing analysis (STA) using design CSV files, Yosys synthesis tool, and OpenTimer timing analyzer.
+This project automates the ASIC front-end flow from reading configuration files to generating timing analysis reports.  
+It uses Tcl with Yosys for synthesis and OpenTimer for static timing analysis (STA).
 
-***
+## Overview
 
-## CSV Reading and Variable Creation
+The script:
+1. Reads design and file path settings from a configuration CSV.
+2. Reads timing constraints from another CSV.
+3. Validates all required directories and files.
+4. Generates a Synopsys Design Constraints (SDC) file.
+5. Checks design hierarchy for missing modules.
+6. Runs logic synthesis with Yosys.
+7. Cleans the synthesized netlist.
+8. Runs STA with OpenTimer.
+9. Reports slack, violations, instance count, and runtime.
 
-- Loads design details from a CSV file into a matrix and then links it to an array `arr` for variable creation.
-- Normalizes file paths and sets TCL variables such as `DesignName`, `OutputDirectory`, `NetlistDirectory`, `EarlyLibraryPath`, `LateLibraryPath`, and `ConstraintsFile`.
-- Outputs the size of the CSV and confirms variable assignments.
+---
+
+## Project Structure
 
 ```
 
+.
+├── script.tcl                 # Main automation script
+├── config.csv                 # Design and file path settings
+├── constraints.csv            # Clock, input, and output timing constraints
+├── netlist/                   # RTL/netlist Verilog files
+├── libs/                      # Liberty timing libraries
+├── output/                    # Generated files and reports
+
+````
+
+---
+
+## Input Files
+
+### 1. config.csv
+
+Example:
+
+| DesignName | OutputDirectory | NetlistDirectory | EarlyTimingLibrary | LateTimingLibrary | ConstraintsFile |
+|------------|-----------------|------------------|--------------------|-------------------|-----------------|
+| mychip     | ./output        | ./netlist        | ./libs/early.lib   | ./libs/late.lib   | ./constraints.csv |
+
+**Tcl snippet reading `config.csv`:**
+```tcl
 package require csv
-package require struct::matrix
+set fp [open $argv r]
+set data [csv::read2matrix $fp m]
+close $fp
+set designName [m get cell 1 0]
+set outputDir  [m get cell 1 1]
+````
 
-set file [lindex \$argv 0]
-set f [open \$file]
-struct::matrix m
-csv::read2matrix \$f m , auto
-close \$f
+---
 
-set cols [m columns]
-set rows [m rows]
+### 2. constraints.csv
 
-m link arr
-puts "Column: \$cols, Rows: \$rows are the size of the CSV"
+Example:
 
-set i 0
-while {\$i < \$rows} {
-puts "Setting value for $arr(0,$i) as '$arr(1,$i)'"
-if {\$i == 0} {
-set [string map {" " ""} $arr(0,$i)] $arr(1,$i)
-} else {
-set [string map {" " ""} $arr(0,$i)] [file normalize $arr(1,$i)]
+| type   | name    | period | waveform\_rise | waveform\_fall | early\_rise\_delay | early\_fall\_delay | late\_rise\_delay | late\_fall\_delay |
+| ------ | ------- | ------ | -------------- | -------------- | ------------------ | ------------------ | ----------------- | ----------------- |
+| CLOCK  | clk     | 5.0    | 0.0            | 2.5            |                    |                    |                   |                   |
+| INPUT  | data\_i |        |                |                | 0.5                | 0.5                | 1.0               | 1.0               |
+| OUTPUT | data\_o |        |                |                |                    |                    | 0.7               | 0.7               |
+
+**Tcl snippet generating SDC:**
+
+```tcl
+if {$type eq "CLOCK"} {
+    puts $sdc "create_clock -name $name -period $period -waveform {$waveform_rise $waveform_fall} \[get_ports $name]"
+} elseif {$type eq "INPUT"} {
+    puts $sdc "set_input_delay -min $early_rise_delay -clock $clock \[get_ports $name]"
 }
-set i [expr {\$i+1}]
-}
-
 ```
 
-***
+---
 
-## File and Directory Validation
+## How to Run
 
-- Checks if essential directories and files exist.
-- Creates output directory if missing.
-- Exits script with error message if required files are not found.
-
+```bash
+tclsh script.tcl config.csv
 ```
 
-puts "INFO: Validating if all files are present..."
-puts "INFO: Design name: \$DesignName"
+The script will:
 
-if {! [file isdirectory \$OutputDirectory]} {
-puts "File \$OutputDirectory does not exist! Creating file \$OutputDirectory"
-file mkdir \$OutputDirectory
-} else {
-puts "Found file \$OutputDirectory"
+* Validate all inputs
+* Generate `<DesignName>.sdc`
+* Create and run Yosys synthesis scripts
+* Run OpenTimer for STA
+* Produce reports in the output directory
+
+---
+
+## Main Steps with Code Examples
+
+### 1. Validate Inputs
+
+```tcl
+if {![file exists $outputDir]} {
+    error "Output directory does not exist: $outputDir"
 }
-
-if {! [file isdirectory \$NetlistDirectory]} {
-puts "File \$NetlistDirectory does not exist!"
-} else {
-puts "Found file \$NetlistDirectory"
-}
-
-if {! [file exists \$EarlyLibraryPath]} {
-puts "File \$EarlyLibraryPath does not exist!"
-exit
-} else {
-puts "Found file \$EarlyLibraryPath"
-}
-
-if {! [file exists \$LateLibraryPath]} {
-puts "File \$LateLibraryPath does not exist!"
-exit
-} else {
-puts "Found file \$LateLibraryPath"
-}
-
-if {! [file exists \$ConstraintsFile]} {
-puts "File \$ConstraintsFile does not exist!"
-exit
-} else {
-puts "Found file \$ConstraintsFile"
-}
-
 ```
 
-***
+### 2. Run Yosys Hierarchy Check
 
-## Constraint CSV Parsing and SDC Generation
-
-- Reads constraints CSV into matrix `const`.
-- Finds starting rows for `CLOCKS`, `INPUTS`, and `OUTPUTS`.
-- Extracts clock parameters for delays and slews and writes `create_clock` and `set_clock_latency`/`set_clock_transition` commands into an SDC file.
-- Processes input/output port delay and transition constraints.
-- Deals with bussed ports by parsing Verilog netlist files to distinguish bit and bus ports, adjusting commands accordingly.
-
-Example snippet for clock constraints:
-
+```tcl
+puts $ys "read_verilog $netlistDir/*.v"
+puts $ys "hierarchy -check -top $designName"
 ```
 
-set sdc_file [open $OutputDirectory/$DesignName.sdc "w"]
-set i [expr \$clocks_row+1]
-set port [expr \$inputs_row-1]
+### 3. Run Yosys Synthesis
 
-while {\$i < \$port} {
-
-    puts -nonewline $sdc_file "\ncreate_clock -name [const get cell 0 $i] -period [const get cell 1 $i] -waveform \{0 [expr {[const get cell 1 $i]*[const get cell 2 $i]/100}]\} $$get_ports [const get cell 0 $i]$$"
-    puts -nonewline $sdc_file "\nset_clock_latency -source -early -rise [const get cell $clock_early_rise_delay $i] $$get_clocks [const get cell 0 $i]$$"
-    ...
-    set i [expr $i+1]
-    }
-
+```tcl
+puts $ys "synth -top $designName"
+puts $ys "write_verilog $outputDir/$designName.synth.v"
+exec yosys -s $outputDir/$designName.synth.ys
 ```
 
-***
+### 4. Clean Synthesized Netlist
 
-## Hierarchy Check Using Yosys
-
-- Creates a Yosys script to read Liberty files and Verilog netlists.
-- Performs hierarchy checking.
-- Catches errors during execution and outputs meaningful messages if RTL modules are missing.
-- Logs stored in `${OutputDirectory}/${DesignName}.hierarchy_check.log`.
-
+```tcl
+set in [open "$outputDir/$designName.synth.v" r]
+set out [open "$outputDir/$designName.final.synth.v" w]
+while {[gets $in line] >= 0} {
+    if {![regexp {^\s*\/\/} $line]} {puts $out $line}
+}
 ```
 
-set data "read liberty -lib -ignore miss dir -setattr blackbox ${LateLibraryPath}"
-set filename "$DesignName.hier.ys"
-set fileID [open $OutputDirectory/$filename "w"]
+### 5. Run OpenTimer STA
 
-puts -nonewline \$fileID \$data
-set netlist [glob -dir \$NetlistDirectory *.v]
-
-foreach f \$netlist {
-puts -nonewline \$fileID "\nread verilog file \$f"
-}
-
-puts -nonewline \$fileID "\nhierarchy -check"
-close \$fileID
-
-if { [catch {exec yosys -s $OutputDirectory/$DesignName.hier.ys >\& $OutputDirectory/$DesignName.hierarchy_check.log}]} {
-set pattern "referenced in module"
-set fid [open $OutputDirectory/$DesignName.hierarchy_check.log]
-while {[gets \$fid line] != -1} {
-if {[regexp -all -- \$pattern \$line]} {
-puts "\nERROR: Module [lindex \$line 2] is not part of design"
-puts "\nHierarchy check FAIL"
-}
-}
-close \$fid
-} else {
-puts "\nINFO: Hierarchy check PASS"
-}
-
-puts "\nINFO: Please find the hierarchy check file in [file normalize $OutputDirectory/$DesignName.hierarchy_check.log] for more details"
-
+```tcl
+puts $ot "read_celllib $earlyLib -min"
+puts $ot "read_celllib $lateLib  -max"
+puts $ot "read_verilog $outputDir/$designName.final.synth.v"
+puts $ot "read_sdc $outputDir/$designName.sdc"
+puts $ot "report_timing > $outputDir/$designName.results"
+exec ./opentimer $outputDir/$designName.conf
 ```
 
-***
+---
 
-## Main Synthesis Script Using Yosys
+## Output Files
 
-- Generates synthesis TCL script to read libraries and Verilog sources.
-- Runs synthesis commands: `hierarchy`, `synth`, `splitnets`, optimization, mapping, and output write.
-- Executes synthesis with error handling.
-- Cleans synthesized netlist by removing `*` characters from bussed ports, and writes final synthesis netlist.
+Inside the output directory:
 
+| File                         | Description                                |
+| ---------------------------- | ------------------------------------------ |
+| `<DesignName>.sdc`           | Generated Synopsys Design Constraints file |
+| `<DesignName>.hier.ys`       | Yosys hierarchy check script               |
+| `<DesignName>.synthesis.log` | Yosys synthesis log                        |
+| `<DesignName>.final.synth.v` | Clean synthesized netlist                  |
+| `<DesignName>.conf`          | OpenTimer configuration file               |
+| `<DesignName>.results`       | STA results                                |
+| `<DesignName>.summary`       | Slack, violations, instance count, runtime |
+
+---
+
+## Dependencies
+
+* Tcl with packages:
+
+  * csv
+  * struct::matrix
+* Yosys (logic synthesis)
+* OpenTimer (static timing analysis)
+
+Install example (Ubuntu):
+
+```bash
+sudo apt install tcllib yosys
+# Build OpenTimer from source:
+git clone https://github.com/OpenTimer/OpenTimer.git
+cd OpenTimer && make
 ```
 
-puts "\nINFO: Creating main synthesis script to be used by Yosys"
-set data "read_liberty -lib -ignore_miss_dir -setattr blackbox ${LateLibraryPath}"
-set files "$DesignName.ys"
-set fid [open $OutputDirectory/$files "w"]
-puts -nonewline \$fid \$data
+---
 
-set netlist [glob -dir \$NetlistDirectory *.v]
-foreach f \$netlist {
-puts -nonewline \$fid "\nread_verilog \$f"
-}
-
-puts -nonewline \$fid "\nhierarchy -top \$DesignName"
-puts -nonewline \$fid "\nsynth -top \$DesignName"
-puts -nonewline \$fid "\nsplitnets -ports -format ___\ndfflibmap -liberty \${LateLibraryPath}\nopt"
-puts -nonewline \$fid "\nabc -liberty \${LateLibraryPath}"
-puts -nonewline \$fid "\nflatten"
-puts -nonewline \$fid "\nclean -purge\niopadmap -outpad BUFX2 A:Y -bits\nopt\nclean"
-puts -nonewline \$fid "\nwrite_verilog $OutputDirectory/$DesignName.synth.v"
-close \$fid
-
-puts "\nINFO: Running synthesis..."
-
-if {[catch {exec yosys -s $OutputDirectory/$DesignName.ys >\& $OutputDirectory/$DesignName.synthesis.log} msg]} {
-puts "\nERROR: Synthesis failed. Please refer to log $OutputDirectory/$DesignName.synthesis.log for errors"
-exit
-} else {
-puts "\nINFO: Synthesis successful"
-}
-
-puts "Please find logs $OutputDirectory/$DesignName.synthesis.log"
+## Workflow Diagram
 
 ```
-
-***
-
-## Static Timing Analysis (STA) with OpenTimer
-
-- Sources TCL procedures for controlling output and CPU core usage.
-- Reads Liberty libraries, synthesized netlist, and constraints.
-- Generates SPEF parasitics file and forms configuration file for OpenTimer.
-- Runs OpenTimer and records elapsed time.
-- Extracts timing violations (setup, hold, output) and instance counts from OpenTimer results.
-- Outputs results in a formatted table.
-
+  config.csv + constraints.csv + netlist + libs
+         │
+         ▼
+   [Validate Inputs]
+         │
+         ▼
+   [Generate SDC]
+         │
+         ▼
+  [Yosys Hierarchy Check]
+         │
+         ▼
+   [Yosys Synthesis]
+         │
+         ▼
+ [Clean Synthesized Netlist]
+         │
+         ▼
+  [OpenTimer STA Analysis]
+         │
+         ▼
+  summary.log + reports
 ```
 
-source ./procs/reopenStdout.proc
-source ./procs/set_num_threads.proc
-
-reopenStdout $OutputDirectory/$DesignName.conf
-set_multi_cpu_usage -localCpu 2
-
-source ./procs/read_lib.proc
-read_lib -early /home/vsduser/vsdsynth/osu018_stdcells.lib
-read_lib -late /home/vsduser/vsdsynth/osu018_stdcells.lib
-
-source ./procs/read_verilog.proc
-read_verilog $OutputDirectory/$DesignName.final.synth.v
-
-source ./procs/read_sdc.proc
-read_sdc $OutputDirectory/$DesignName.sdc
-reopenStdout /dev/tty
-
-set enable_prelayout_timing 1
-if {\$enable_prelayout_timing == 1} {
-puts "\nInfo: enable_prelayout_timing is \$enable_prelayout_timing. Enabling zero-wire load parasitics"
-set spef_file [open $OutputDirectory/$DesignName.spef w]
-puts \$spef_file "*SPEF \"IEEE 1481-1998\" "
-puts $spef_file "*DESIGN \"$DesignName\" "
-puts \$spef_file "*DATE \"Sun May 11 20:51:50 2025\" "
-puts \$spef_file "*VENDOR \"PS 2025 Hackathon\" "
-puts \$spef_file "*PROGRAM \"Benchmark Parasitic Generator\" "
-puts \$spef_file "*VERSION \"0.0\" "
-puts \$spef_file "*DESIGN_FLOW \"NETLIST_TYPE_VERILOG\" "
-puts \$spef_file "*DIVIDER / "
-puts \$spef_file "*DELIMITER : "
-puts \$spef_file "*BUS_DELIMITER [ ] "
-puts \$spef_file "*T_UNIT 1 PS "
-puts \$spef_file "*C_UNIT 1 FF "
-puts \$spef_file "*R_UNIT 1 KOHM "
-puts \$spef_file "*L_UNIT 1 UH "
-}
-close \$spef_file
-
-set conf_file [open $OutputDirectory/$DesignName.conf a]
-puts \$conf_file "set_spef_fpath $OutputDirectory/$DesignName.spef"
-puts \$conf_file "init_timer "
-puts \$conf_file "report_timer "
-puts \$conf_file "report_wns "
-puts \$conf_file "report_worst_paths -numPaths 10000 "
-close \$conf_file
-
-set tcl_precision 3
-
-set time_elapsed_in_us [time {exec /home/vsduser/OpenTimer-1.0.5/bin/OpenTimer < $OutputDirectory/$DesignName.conf >\& $OutputDirectory/$DesignName.results} 1]
-set time_elapsed_in_sec "[expr {[lindex \$time_elapsed_in_us 0]/100000}] sec"
-puts "\nInfo: STA finished in \$time_elapsed_in_sec seconds"
-puts "\nInfo: Refer to $OutputDirectory/$DesignName.results for warning and errors"
-
-```
-
-***
-
-## Extracting and Formatting Timing Results
-
-- Parses OpenTimer results for worst arrival time slack, setup/hold violations, output violations, and instance count.
-- Prints a tabular summary of prelayout timing results nicely formatted.
-
-```
-
-
-# Extract worst slack and violation counts from results file
-
-set WRAT "-"
-set fil [open $OutputDirectory/$DesignName.results r]
-set pattern {RAT}
-while {[gets \$fil line] != -1} {
-if {[regexp \$pattern \$line]} {
-set WRAT "[expr {[lindex \$line 3]/1000}]ns"
-break
-}
-}
-close \$fil
-
-set fil [open $OutputDirectory/$DesignName.results r]
-set count 0
-while {[gets \$fil line] != -1} {
-incr count [regexp -all -- \$pattern \$line]
-}
-set count_output_violations \$count
-close \$fil
-
-# Similarly for Setup and Hold slack/violations...
-
-puts "DesignName is \{$DesignName\}"
-puts "time_elapsed_in_sec is \{$time_elapsed_in_sec\}"
-puts "Instance_count is \{$instance_count\}"
-puts "worst_negative_setup_slack is \{$w_negative_setup_slack\}"
-puts "Number_of_setup_violations is \{$count_setup_violations\}"
-puts "worst_negative_hold_slack is \{$w_negative_hold_slack\}"
-puts "Number_of_hold_violations is \{$count_hold_violations\}"
-puts "worst_RAT_slack is \{$WRAT\}"
-puts "Number_output_violations is \{\$count_output_violations\}"
-
-puts "\n"
-puts "                                 **PRELAYOUT TIMING RESULTS**                                                      "
-set formatStr {%15s%15s%15s%15s%15s%15s%15s%15s%15s}
-
-puts [format \$formatStr "-----------" "-------" "--------------" "-----------" "-----------" "----------" "----------" "-------" "-------"]
-puts [format \$formatStr "Design Name" "Runtime" "Instance Count" " WNS Setup " " FEP Setup " " WNS Hold " " FEP Hold " "WNS RAT" "FEP RAT"]
-puts [format \$formatStr "-----------" "-------" "--------------" "-----------" "-----------" "----------" "----------" "-------" "-------"]
-foreach design_name \$DesignName runtime \$time_elapsed_in_sec instance_count \$instance_count wns_setup \$w_negative_setup_slack fep_setup \$count_setup_violations wns_hold \$w_negative_hold_slack fep_hold \$count_hold_violations wns_rat \$WRAT fep_rat \$count_output_violations {
-puts [format \$formatStr \$design_name \$runtime \$instance_count \$wns_setup \$fep_setup \$wns_hold \$fep_hold \$wns_rat \$fep_rat]
-}
-
-puts [format \$formatStr "-----------" "-------" "--------------" "-----------" "-----------" "----------" "----------" "-------" "-------"]
-puts "\n"
-
-```
