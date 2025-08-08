@@ -17,6 +17,13 @@ The script:
 8. Runs STA with OpenTimer.
 9. Reports slack, violations, instance count, and runtime.
 
+![Terminal Interface](./Absynth.png)
+
+*Figure 1: Script running in the terminal with initial tool setup.*
+
+![Pre-layout Timing Results](./Result.png)
+
+*Figure 2: Output showing pre-layout timing results from OpenTimer.*
 ---
 
 ## Project Structure
